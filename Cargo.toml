@@ -1,0 +1,62 @@
+[package]
+name = "snout-push"
+description = "snout-push: push notifications over APNs, FCM and Web Push, from one API and from SQL, with the queue and the delivery log in the project's own Postgres."
+version = "0.1.1"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/snoutdata/snout-push"
+rust-version = "1.98.1"
+publish = false
+
+[[bin]]
+name = "snout-push"
+path = "src/main.rs"
+
+[dependencies]
+# Every signature and cipher: ES256 (APNs provider tokens, VAPID), RS256 (the FCM OAuth
+# assertion), ECDH P-256, HKDF and AES-128-GCM (Web Push). ring is already in the lockfile
+# through rustls, so push adds no crypto crate, and does not take `rsa` (RUSTSEC-2023-0071).
+ring = "0.17"
+base64 = "0.22"
+url = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+thiserror = "2"
+
+# The network: HTTP/2 to Apple, Google and the browsers' push services (ALPN over rustls), with
+# every address checked before a connection is made (net.rs).
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time", "sync"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2", "json"] }
+tracing = "0.1"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+
+# The project's own database: the queue is drained there, the log written there (the sender
+# connects as snout_push_admin on the pod network, so no TLS: the storage rule).
+tokio-postgres = { version = "0.7", features = ["with-serde_json-1"] }
+deadpool-postgres = "0.14"
+
+# The two HTTP servers: /push/v1 (through the front door) and /tenants (the host agent's).
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "json", "query"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "json", "ansi"] }
+
+
+# Written out from the stack workspace by scripts/assemble.sh.
+[lints.rust]
+# X13: no `unsafe` outside the pgrx boundary. The three extensions under ext/ opt out in
+# their own Cargo.toml when pgrx arrives, and nowhere else may.
+unsafe_code = "forbid"
+
+[lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "abort"
+
+# Its own workspace: this repository is not part of any other.
+[workspace]
