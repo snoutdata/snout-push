@@ -2,9 +2,9 @@
 //! P2 as reversed): everything about its push, keys included, stays in its pod.
 //!
 //! The runner holds one connection that LISTENs on `snout_push` (a message to send) and
-//! `snout_push_credentials` (a key changed), makes a pass on every notification, every [`TICK`]
-//! (retries, and a paid project's scheduled sends) and whenever the API queues something, and
-//! prunes hourly. Its providers are built from the project's own `push.credentials` rows and are
+//! `snout_push_credentials` (a key changed), makes a pass on every notification, whenever the API
+//! queues something, and when the queue next has something due (a paid project's scheduled send,
+//! a retry), at the latest every [`TICK`], and prunes hourly. Its providers are built from the project's own `push.credentials` rows and are
 //! rebuilt when those change, so a new APNs key restarts nothing. A database that is not up yet
 //! refuses the connection and the runner tries again every [`RECONNECT_MAX`] at most.
 
@@ -28,6 +28,7 @@ use crate::notification::NotificationError;
 use crate::providers::{Apns, Fcm, Providers, Web};
 
 pub const TICK: Duration = Duration::from_secs(30);
+pub const MIN_WAIT: Duration = Duration::from_millis(200);
 pub const RECONNECT_MAX: Duration = Duration::from_secs(10);
 pub const PRUNE_EVERY: Duration = Duration::from_secs(3600);
 
@@ -289,7 +290,10 @@ async fn serve(project: &Project, database_url: &str) -> Result<(), String> {
 			.map_err(|e| e.to_string())?;
 		// Neither is fatal: the owner reading push data and the cascade from auth.users are
 		// conveniences, and sending must not wait for them.
-		if let Err(error) = client.batch_execute("SELECT push.share_with_members()").await {
+		if let Err(error) = client
+			.batch_execute("SELECT push.share_with_members()")
+			.await
+		{
 			tracing::warn!(reason = %db_message(&error), "the project's owner cannot read push data");
 		}
 		link_auth(&client).await;
@@ -309,6 +313,14 @@ async fn serve(project: &Project, database_url: &str) -> Result<(), String> {
 			if report != drain::Report::default() {
 				tracing::info!(?report, "pass");
 			}
+			// Wake when the next thing is due: a scheduled send that waited out the tick went up
+			// to 30 s late. The floor keeps a row another sender holds from spinning this loop.
+			let wait = drain::next_due(&client)
+				.await
+				.map_err(|e| e.to_string())?
+				.map_or(TICK, |secs| {
+					Duration::from_secs_f64(secs.clamp(MIN_WAIT.as_secs_f64(), TICK.as_secs_f64()))
+				});
 			if last_prune.elapsed() >= PRUNE_EVERY {
 				let (messages, devices) = drain::prune(&client).await.map_err(|e| e.to_string())?;
 				if messages + devices > 0 {
@@ -334,7 +346,7 @@ async fn serve(project: &Project, database_url: &str) -> Result<(), String> {
 					}
 				}
 				_ = project.nudge.notified() => {}
-				_ = tokio::time::sleep(TICK) => {}
+				_ = tokio::time::sleep(wait) => {}
 			}
 		}
 	}

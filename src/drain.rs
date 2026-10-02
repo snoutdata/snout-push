@@ -24,7 +24,8 @@ use crate::providers::{Device, Providers, Transport};
 pub const STALE_CLAIM_SECS: i64 = 300;
 /// How far a claimed delivery is pushed out, in case its outcome is never written.
 pub const CLAIM_HOLD_SECS: i64 = 300;
-/// A future `send_at` within this much of now is "now": clocks disagree.
+/// On a free project, a future `send_at` within this much of now is "now" rather than refused:
+/// clocks disagree. A paid project's `send_at` is kept, never sent early.
 pub const SCHEDULING_GRACE_SECS: i64 = 60;
 /// Deliveries claimed per round of a pass.
 pub const BATCH: i64 = 200;
@@ -148,6 +149,11 @@ pub async fn pass(
 			.await?;
 	}
 
+	let grace = if plan.scheduling {
+		0.0
+	} else {
+		SCHEDULING_GRACE_SECS as f64
+	};
 	let claimed = client
 		.query(
 			"UPDATE push.messages m SET status = 'sending', claimed_at = now() \
@@ -156,7 +162,7 @@ pub async fn pass(
 			      OR (status = 'sending' AND expanded_at IS NULL AND claimed_at < now() - make_interval(secs => $3)) \
 			   ORDER BY send_at LIMIT $1 FOR UPDATE SKIP LOCKED) \
 			 RETURNING m.id",
-			&[&BATCH, &(SCHEDULING_GRACE_SECS as f64), &(STALE_CLAIM_SECS as f64)],
+			&[&BATCH, &grace, &(STALE_CLAIM_SECS as f64)],
 		)
 		.await?;
 	report.claimed_messages = claimed.len() as u64;
@@ -186,6 +192,21 @@ pub async fn pass(
 
 	report.finished_messages = finish(client).await?;
 	Ok(report)
+}
+
+/// Seconds until the queue next has something due (a scheduled message or a retry), or `None`
+/// when nothing is waiting, so the runner wakes then rather than on its next tick.
+pub async fn next_due(client: &Client) -> Result<Option<f64>, tokio_postgres::Error> {
+	let row = client
+		.query_one(
+			"SELECT extract(epoch FROM least( \
+			   (SELECT min(send_at) FROM push.messages WHERE status = 'queued'), \
+			   (SELECT min(l.next_attempt_at) FROM push.deliveries l JOIN push.messages m ON m.id = l.message_id \
+			     WHERE l.status = 'pending' AND m.status = 'sending')) - clock_timestamp())::float8",
+			&[],
+		)
+		.await?;
+	Ok(row.get(0))
 }
 
 /// Turns one message's target into one pending delivery per live device. Idempotent.
@@ -655,6 +676,14 @@ mod tests {
 				.get(0);
 			let report = pass(&client, &providers, PAID).await.unwrap();
 			assert_eq!(report.claimed_messages, 0, "not due yet");
+			let due = next_due(&client)
+				.await
+				.unwrap()
+				.expect("something is waiting");
+			assert!(
+				(3500.0..=3600.0).contains(&due),
+				"due in an hour, not {due}"
+			);
 			let report = pass(&client, &providers, FREE).await.unwrap();
 			assert_eq!(report.refused_scheduled, 1);
 			let row = client
@@ -666,6 +695,32 @@ mod tests {
 				.unwrap();
 			assert_eq!(row.get::<_, &str>(0), "refused");
 			assert_eq!(row.get::<_, &str>(1), SCHEDULING_REFUSED);
+
+			// Half a minute out: a paid project waits for it (the grace sent it at once, up to a
+			// minute early), and a free one sends it now rather than refusing it.
+			client
+				.query_one(
+					"SELECT push.send('{\"title\":\"Soon\"}', user_ids => ARRAY[$1::text::uuid], send_at => now() + interval '30 seconds')",
+					&[&ALICE],
+				)
+				.await
+				.unwrap();
+			let report = pass(&client, &providers, PAID).await.unwrap();
+			assert_eq!(report.claimed_messages, 0, "a paid send_at is kept");
+			let due = next_due(&client)
+				.await
+				.unwrap()
+				.expect("something is waiting");
+			assert!(
+				(25.0..=30.0).contains(&due),
+				"due in half a minute, not {due}"
+			);
+			let report = pass(&client, &providers, FREE).await.unwrap();
+			assert_eq!(
+				(report.refused_scheduled, report.claimed_messages),
+				(0, 1),
+				"{report:?}"
+			);
 
 			// A 503 is retried later, not failed, and the message stays open.
 			device(&client, ALICE, FLAKY).await;
