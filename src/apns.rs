@@ -4,7 +4,7 @@
 //! signed with the customer's `.p8` key (key id + team id). A key serves every app of the team and
 //! does not expire yearly as certificates did, so certificates are not supported at all. Apple
 //! now also issues keys restricted to ONE environment, so a project may hold a key per
-//! environment (UPSTREAM-ISSUES.md); which key signs is chosen by the device's environment. Apple wants the token renewed at most every 20 minutes and at least every 60.
+//! environment; which key signs is chosen by the device's environment. Apple wants the token renewed at most every 20 minutes and at least every 60.
 //!
 //! The environment belongs to the DEVICE, not the project: a development build's token is only
 //! valid against the sandbox, and sending it to production is Apple's single most common
@@ -47,7 +47,7 @@ impl Environment {
 	}
 }
 
-/// A project's APNs key. Holds the private key in memory only (PUSH.md: credentials).
+/// A project's APNs key. Holds the private key in memory only.
 #[derive(Debug)]
 pub struct Credentials {
 	key: EsKey,

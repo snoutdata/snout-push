@@ -6,7 +6,7 @@
 //!  - **RFC 8292**, VAPID: each request carries a JWT signed with the PROJECT's key pair, whose
 //!    public half the browser was given when it subscribed. No Google or Apple account is involved,
 //!    which is why a web app on Snout Push needs no Firebase project.
-//!  - **The endpoint allowlist** (PUSH.md, P12): a subscription's endpoint is a URL a browser
+//!  - **The endpoint allowlist**: a subscription's endpoint is a URL a browser
 //!    hands us, so it is the one place a caller chooses where this server sends a request. The
 //!    fleet's network cannot filter by host name, so this module does: https, the default port, and
 //!    a host on the reviewed list, checked when a device registers AND again at send.
@@ -35,7 +35,7 @@ pub const MAX_PLAINTEXT: usize = RECORD_SIZE as usize - HEADER_LEN - TAG_LEN - 1
 /// a clock that is wrong in either direction.
 pub const VAPID_LIFETIME_SECS: u64 = 12 * 60 * 60;
 
-/// Push services a subscription may point at (P12). Extended by a reviewed change to this list,
+/// Push services a subscription may point at. Extended by a reviewed change to this list,
 /// never by a setting: each entry is a host this server will send requests to on a stranger's say.
 const EXACT_HOSTS: [&str; 2] = [
 	// Chrome, Edge on Android, Opera, Samsung Internet.
@@ -285,7 +285,7 @@ pub fn request(
 	check_endpoint(subscription.endpoint.as_str())?;
 	// Every browser requires a push to SHOW something (`userVisibleOnly`), and Safari revokes the
 	// permission of a site whose push shows nothing. A silent push is refused for the web rather
-	// than costing the customer their subscribers (UPSTREAM-ISSUES.md).
+	// than costing the customer their subscribers.
 	if notification.background {
 		return Err(error(
 			"A background (silent) notification cannot go to a browser: browsers require every push to show something, and Safari removes the permission of a site whose push does not.",

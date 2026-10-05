@@ -25,7 +25,7 @@ pub mod webpush;
 #[cfg(test)]
 mod testing;
 
-/// Entry points for the fuzz targets (`packages/stack/fuzz`): each parser of untrusted input,
+/// Entry points for the fuzz targets: each parser of untrusted input,
 /// called the way a request or a provider's answer reaches it. Not an API; nothing here is stable.
 #[doc(hidden)]
 pub mod fuzz {

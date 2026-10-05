@@ -79,7 +79,7 @@ impl Priority {
 }
 
 /// The data key every delivery carries its id under, so the app can report it received or opened
-/// (PUSH.md, P11). Reserved, like the providers' own.
+/// Reserved, like the providers' own.
 pub const DELIVERY_KEY: &str = "snout_push_delivery";
 
 /// FCM refuses these data keys, and `snout_push*` is ours; refusing them for every transport
@@ -193,12 +193,12 @@ impl Request {
 /// What a provider's answer means for the device and the message.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Outcome {
-	/// The provider took it. Not "delivered" (PUSH.md, P11): that is only ever the app's report.
+	/// The provider took it. Not "delivered": that is only ever the app's report.
 	Accepted { provider_id: Option<String> },
 	/// The token or subscription is dead; the device is disabled with this reason. `since_ms` is
 	/// when the provider says it stopped being valid (APNs' `timestamp`): a device that registered
 	/// AGAIN after that moment is alive, so the caller disables it only if its `last_seen_at` is
-	/// older (Apple's own guidance; UPSTREAM-ISSUES.md).
+	/// older (Apple's own guidance).
 	Unregistered {
 		reason: String,
 		since_ms: Option<u64>,

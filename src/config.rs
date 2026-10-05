@@ -1,8 +1,8 @@
 //! The server's configuration, from the environment. Every setting is listed here with its default
-//! and whether it is secret; the README's configuration reference is this list (X12).
+//! and whether it is secret; the README's configuration reference is this list.
 //!
 //! One server serves one project, from inside that project's pod, so there is no admin API and no
-//! tenant to pick out of a host name. There are no demo secrets (X13): without its database, its
+//! tenant to pick out of a host name. There are no demo secrets: without its database, its
 //! JWT secret and a VAPID contact the server refuses to start, and says which one is missing.
 
 use std::collections::HashMap;
@@ -24,7 +24,7 @@ pub struct Config {
 	/// (RFC 8292), a `mailto:` or `https:` URL. Never a default of ours.
 	pub vapid_subject: String,
 	/// `PUSH_POD_MEMORY_MB` (default 512) and `PUSH_SCHEDULING` (default false): the plan.
-	/// Concurrency follows the memory (P5); scheduling is for plans that never pause (P4).
+	/// Concurrency follows the memory; scheduling is for plans that never pause.
 	pub plan: Plan,
 	/// `PUSH_ANON_ROLE`, `PUSH_AUTHENTICATED_ROLE`, `PUSH_SERVICE_ROLE`: the API roles, defaulting to
 	/// `anon`, `authenticated` and `service_role`. `PUSH_INSTALL_ROLES=true` creates them when

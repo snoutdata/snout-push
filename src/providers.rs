@@ -5,11 +5,11 @@
 //! What each provider remembers:
 //!  - **APNs**: a provider token per key, renewed after 40 minutes (Apple: no sooner than 20, no
 //!    later than 60), and renewed early exactly once if Apple says it expired. Its own HTTP client,
-//!    because Apple binds a connection to one team (PUSH.md, A6).
+//!    because Apple binds a connection to one team.
 //!  - **FCM**: an access token, renewed five minutes before Google's `expires_in`, and once if
 //!    Google says it is no longer valid.
 //!  - **Web Push**: the project's VAPID keys by id, since a subscription only ever takes the key it
-//!    was made with (A8).
+//!    was made with.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -77,7 +77,7 @@ fn network(error: NetError, who: &str) -> Outcome {
 	}
 }
 
-/// A project's APNs keys: one for both environments, or one per environment (A6).
+/// A project's APNs keys: one for both environments, or one per environment.
 pub struct Apns {
 	keys: Vec<(Option<Environment>, apns::Credentials)>,
 	default_topic: String,
@@ -132,7 +132,7 @@ impl Apns {
 		Ok(token)
 	}
 
-	/// Proves every key signs a provider token (PUSH.md, A3), before any of them is stored.
+	/// Proves every key signs a provider token, before any of them is stored.
 	pub fn prove(&self, now: u64) -> Result<(), NotificationError> {
 		for (_, key) in &self.keys {
 			key.provider_token(now)?;
@@ -257,7 +257,7 @@ impl Fcm {
 		&self.credentials.client_email
 	}
 
-	/// Proves the credentials work by minting a real token (A3: nothing that fails is stored).
+	/// Proves the credentials work by minting a real token (nothing that fails is stored).
 	pub async fn prove(&self, now: u64) -> Result<(), Outcome> {
 		self.access_token(now, true).await.map(|_| ())
 	}
@@ -348,7 +348,7 @@ impl Web {
 		self.keys[&self.current].public_key()
 	}
 
-	/// The key a new subscription is made with, recorded on its device row (A8).
+	/// The key a new subscription is made with, recorded on its device row.
 	pub fn current_id(&self) -> &str {
 		&self.current
 	}

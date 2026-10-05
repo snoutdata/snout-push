@@ -9,7 +9,7 @@
 //! twice; it never silently gets none.
 //!
 //! The sender connects as the schema's owner, so row-level security does not apply here: every
-//! access decision was made when the message was inserted (PUSH.md, P8).
+//! access decision was made when the message was inserted.
 
 use std::sync::Arc;
 
@@ -33,14 +33,14 @@ pub const BATCH: i64 = 200;
 /// What one project may do, from its plan.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Plan {
-	/// Whether a future `send_at`, and retrying past the free window, is allowed (PUSH.md, P4).
+	/// Whether a future `send_at`, and retrying past the free window, is allowed (a free project can pause).
 	pub scheduling: bool,
-	/// In-flight provider requests at once (P5: from the pod's size).
+	/// In-flight provider requests at once (from the pod's size).
 	pub concurrency: usize,
 }
 
 impl Plan {
-	/// P5: a project's concurrency follows its pod's memory, 1 per 32 MB, between 4 and 64.
+	/// A project's concurrency follows its pod's memory, 1 per 32 MB, between 4 and 64.
 	pub fn from_pod(pod_memory_mb: u32, scheduling: bool) -> Self {
 		Self {
 			scheduling,
@@ -58,7 +58,7 @@ impl Plan {
 	}
 }
 
-/// The sentence a free project's future `send_at` is refused with (P4).
+/// The sentence a free project's future `send_at` is refused with.
 pub const SCHEDULING_REFUSED: &str = "Scheduled and delayed sends are on paid plans: a free project can pause, and a paused project has nothing to send it on time. Send without send_at, or upgrade.";
 
 /// The most attempts a delivery gets, whatever the window.
@@ -67,7 +67,7 @@ pub const MAX_ATTEMPTS: i32 = 12;
 /// When to try again, in seconds from now, or `None` to give up. `retry_after` is what the
 /// provider asked for; `attempts` includes the one that just failed; `age` is seconds since the
 /// delivery row was made. `jitter` is in 0..1 (a fixed value in tests). The floor per provider is
-/// A4: FCM's 10 seconds, Apple's advice to wait for a 5xx, and Retry-After always honoured.
+/// FCM's 10 seconds, Apple's advice to wait for a 5xx, and Retry-After always honoured.
 pub fn next_attempt(
 	retry_after: Option<u64>,
 	attempts: i32,
@@ -105,7 +105,7 @@ pub struct Work {
 	pub age_secs: u64,
 	pub device: Option<Device>,
 	pub device_disabled: bool,
-	/// `last_seen_at` in milliseconds, for APNs' 410 timestamp (A5).
+	/// `last_seen_at` in milliseconds, for APNs' 410 timestamp.
 	pub device_seen_ms: Option<i64>,
 	pub notification: Value,
 	pub envelope: Envelope,
@@ -314,7 +314,7 @@ async fn deliver(providers: &Providers, work: &Work, now: u64) -> Outcome {
 		return Outcome::Refused { reason: error.0 };
 	}
 	// After validation, which refuses the key from a customer: the app reads it back to report
-	// the notification received or opened (P11).
+	// the notification received or opened.
 	notification.data.insert(
 		crate::notification::DELIVERY_KEY.into(),
 		serde_json::json!(work.delivery_id),
@@ -408,7 +408,7 @@ async fn record(
 					&[&id, &reason],
 				)
 				.await?;
-			// A5: a device that registered again after the provider's timestamp is alive.
+			// A device that registered again after the provider's timestamp is alive.
 			let stale = match (since_ms, work.device_seen_ms) {
 				(Some(since), Some(seen)) => u64::try_from(seen).unwrap_or(0) < since,
 				_ => true,
@@ -448,7 +448,7 @@ async fn finish(client: &Client) -> Result<u64, tokio_postgres::Error> {
 		.await
 }
 
-/// The hourly housekeeping: the log past its retention (PQ3), and devices not seen for the
+/// The hourly housekeeping: the log past its retention, and devices not seen for the
 /// project's staleness period.
 pub async fn prune(client: &Client) -> Result<(u64, u64), tokio_postgres::Error> {
 	let messages = client
@@ -665,7 +665,7 @@ mod tests {
 			let again = pass(&client, &providers, FREE).await.unwrap();
 			assert_eq!(again, Report::default());
 
-			// P4: a free project's scheduled send is refused with the sentence; a paid one waits.
+			// A free project's scheduled send is refused with the sentence; a paid one waits.
 			let scheduled: i64 = client
 				.query_one(
 					"SELECT push.send('{\"title\":\"Later\"}', user_ids => ARRAY[$1::text::uuid], send_at => now() + interval '1 hour')",

@@ -515,7 +515,7 @@ mod tests {
 	}
 
 	/// A real RSA key, made for the test by openssl (the stack's container has it) rather than
-	/// committed: no key of any kind lives in the tree (X13). Skips where there is no openssl.
+	/// committed: no key of any kind lives in the tree. Skips where there is no openssl.
 	#[test]
 	fn the_assertion_is_rs256_signed_for_google_whatever_the_file_says() {
 		let Ok(out) = std::process::Command::new("openssl")

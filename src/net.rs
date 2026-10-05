@@ -1,6 +1,6 @@
 //! The only way this server makes a request, and the rules every request keeps.
 //!
-//! A Web Push endpoint is a URL a stranger's browser handed us (PUSH.md, P12), and the fleet's
+//! A Web Push endpoint is a URL a stranger's browser handed us, and the fleet's
 //! network cannot filter by host name, so the checks live here, in process:
 //!
 //!  - **Every address is checked before a connection is made.** The client resolves names through
@@ -193,7 +193,7 @@ impl Policy {
 }
 
 /// A client: its own connection pool, so a caller that must not share connections (APNs: one
-/// team per connection, PUSH.md A6) makes its own, and everyone else shares one.
+/// team per connection) makes its own, and everyone else shares one.
 #[derive(Debug, Clone)]
 pub struct Http {
 	client: reqwest::Client,

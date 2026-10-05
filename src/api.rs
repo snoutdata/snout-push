@@ -1,6 +1,6 @@
 //! `/push/v1`: apps and servers, through the front door, to the one project this server serves.
 //!
-//! `/push/v1` exists because the data API is a paid feature (STACK.md, S16): a free project's app
+//! `/push/v1` exists because the data API is a paid feature on SnoutData Cloud: a free project's app
 //! must still be able to register a device. Every call runs in the project's database AS THE
 //! CALLER (the role and the JWT claims set for the transaction), so the project's own policies
 //! decide; this server checks shapes, never access.
@@ -578,7 +578,7 @@ async fn credential_summaries(State(app): State<AppState>, headers: HeaderMap) -
 	Ok(axum::Json(Value::Object(out)).into_response())
 }
 
-/// Sets APNs or FCM credentials, PROVEN first (PUSH.md, A3): an APNs key must sign a provider
+/// Sets APNs or FCM credentials, PROVEN first: an APNs key must sign a provider
 /// token, and a service account must mint a real token from Google. What fails is refused with
 /// its sentence and nothing is stored.
 async fn set_credentials(
@@ -793,7 +793,7 @@ mod tests {
 			.unwrap()
 			.to_string();
 
-		// P8: a user may not send without a policy. P4 on free: a future send_at is refused.
+		// A user may not send without a policy. On free, a future send_at is refused.
 		let refused = call(reqwest::Method::POST, "/push/v1/send", &alice)
 			.json(&json!({"notification": {"title": "hi"}, "user_ids": [BOB]}))
 			.send()

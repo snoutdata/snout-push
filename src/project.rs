@@ -1,5 +1,5 @@
-//! The one project this server serves, from inside that project's own pod (docs/cloud/PUSH.md,
-//! P2 as reversed): everything about its push, keys included, stays in its pod.
+//! The one project this server serves, from inside that project's own pod: everything about its
+//! push, keys included, stays in its pod.
 //!
 //! The runner holds one connection that LISTENs on `snout_push` (a message to send) and
 //! `snout_push_credentials` (a key changed), makes a pass on every notification, whenever the API
@@ -33,7 +33,7 @@ pub const RECONNECT_MAX: Duration = Duration::from_secs(10);
 pub const PRUNE_EVERY: Duration = Duration::from_secs(3600);
 
 /// `push.credentials` for `apns`: the bundle id a device without its own `app` is sent as, and
-/// one key for both environments or one per environment (A6).
+/// one key for both environments or one per environment.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ApnsBody {
@@ -59,7 +59,7 @@ pub struct FcmBody {
 	pub service_account: String,
 }
 
-/// `push.credentials` for `vapid`: private keys by id (PKCS#8, base64), never rotated in place (A8).
+/// `push.credentials` for `vapid`: private keys by id (PKCS#8, base64), never rotated in place.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WebBody {

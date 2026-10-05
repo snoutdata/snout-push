@@ -3,7 +3,7 @@
 #   docker buildx build -f Containerfile --platform linux/arm64 -t snout-push .
 #
 # The context is the repository root, for its lockfile (in the SnoutData monorepo, the stack
-# workspace: `-f push/Containerfile packages/stack`). Scratch, because nothing runs in this
+# workspace root, with `-f push/Containerfile`). Scratch, because nothing runs in this
 # container but the server: TLS roots are compiled in (webpki-roots), names resolve through the
 # resolv.conf the runtime mounts, and there is no shell for anything to be run with.
 FROM docker.io/library/rust:1.98.1-alpine AS build
@@ -17,8 +17,8 @@ FROM scratch
 COPY --from=build /snout-push /snout-push
 USER 1000:1000
 EXPOSE 5200 5201
-# How SnoutData Studio's "Find databases" knows this container is part of the SnoutData stack
-# (docs/desktop/DISCOVERY.md): by label, never by guessing from the image name. Only the
+# How SnoutData Studio's "Find databases" knows this container is part of the SnoutData stack:
+# by label, never by guessing from the image name. Only the
 # `postgres` component is offered as a database; the rest are recognised and left out.
 LABEL com.snoutdata.stack="1" com.snoutdata.component="push"
 ENTRYPOINT ["/snout-push"]

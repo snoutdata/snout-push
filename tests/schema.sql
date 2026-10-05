@@ -31,7 +31,7 @@ SELECT :'again' = :'alice_device' AS same_row \gset
 SELECT set_config('request.jwt.claims', '{"sub":"' || :'bob' || '","role":"authenticated"}', false);
 DO $$ BEGIN ASSERT (SELECT count(*) FROM push.devices) = 0, 'bob cannot see alice''s device'; END $$;
 
--- A2: the phone passes to Bob, so it stops notifying Alice.
+-- The phone passes to Bob, so it stops notifying Alice.
 SELECT push.register_device('apns', :'token', apns_environment => 'production') AS bob_device \gset
 RESET ROLE;
 DO $$ BEGIN
@@ -75,7 +75,7 @@ DO $$ BEGIN
 EXCEPTION WHEN check_violation THEN NULL;
 END $$;
 
--- P8: a signed-in user may NOT send until the customer writes a policy.
+-- A signed-in user may NOT send until the customer writes a policy.
 SET ROLE authenticated;
 SELECT set_config('request.jwt.claims', '{"sub":"' || :'alice' || '","role":"authenticated"}', false);
 DO $$ BEGIN
@@ -132,7 +132,7 @@ END $$;
 SELECT push.send('{"title":"from the server"}', user_ids => ARRAY[:'bob'::uuid]) AS server_message \gset
 RESET ROLE;
 
--- P11: receipts only for the caller's own device.
+-- Receipts only for the caller's own device.
 INSERT INTO push.deliveries (message_id, device_id, transport, status)
 	VALUES (:server_message, :'bob_device', 'apns', 'accepted');
 SET ROLE authenticated;
