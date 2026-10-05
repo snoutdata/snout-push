@@ -100,7 +100,7 @@ There are no demo secrets: without the three required settings the server refuse
 - **A service-account file's own `token_uri` is ignored:** assertions go to Google's token
   endpoint only.
 - **Tokens:** HS256 verified in constant time; the role claim is limited to the three API roles.
-- `#![forbid(unsafe_code)]`, fuzzed parsers (`packages/stack/fuzz`), `cargo-deny` and gitleaks.
+- `#![forbid(unsafe_code)]`, fuzzed parsers (libFuzzer targets over each parser of untrusted input), `cargo-deny` and gitleaks.
   Reports: [SECURITY.md](./SECURITY.md).
 
 ## Operations

@@ -174,7 +174,7 @@ impl RsKey {
 }
 
 /// A PEM block around `body`, for tests. The markers are assembled so no line of the source reads
-/// as a key to a secret scanner (X13); every key a test uses is generated when it runs.
+/// as a key to a secret scanner; every key a test uses is generated when it runs.
 #[cfg(test)]
 pub(crate) fn test_pem(body: &str) -> String {
 	let label = ["PRIVATE", "KEY"].join(" ");
