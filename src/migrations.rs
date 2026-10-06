@@ -11,6 +11,10 @@ pub struct Migration {
 	pub id: i32,
 	pub name: &'static str,
 	pub sql: &'static str,
+	/// The hashes this file had when an earlier release applied it, from before a reword of its
+	/// COMMENTS. Still accepted, so a database migrated then is not refused; the statements in
+	/// the file never change.
+	pub released_as: &'static [&'static str],
 }
 
 impl Migration {
@@ -18,19 +22,29 @@ impl Migration {
 		let digest = ring::digest::digest(&ring::digest::SHA256, self.sql.as_bytes());
 		digest.as_ref().iter().map(|b| format!("{b:02x}")).collect()
 	}
+
+	/// Whether a ledger row's hash is this migration: today's file, or the file as released before
+	/// its comments were reworded.
+	pub fn accepts(&self, hash: &str) -> bool {
+		hash == self.hash() || self.released_as.contains(&hash)
+	}
 }
 
-/// A migration is never edited once released: a change is a new file with the next id.
+/// A migration's statements are never edited once released: a change is a new file with the next
+/// id. Rewording a comment changes the hash, so the old hash goes in `released_as`.
 pub const TENANT: &[Migration] = &[
 	Migration {
 		id: 1,
 		name: "push",
 		sql: include_str!("../migrations/tenant/0001-push.sql"),
+		// 0.1.0-0.1.2, before its comments stopped pointing at internal documents.
+		released_as: &["50e9add430dcd22948e9e145223484414bbcee15d7f1cc1313d63daad4e41331"],
 	},
 	Migration {
 		id: 2,
 		name: "owner-and-auth-link",
 		sql: include_str!("../migrations/tenant/0002-owner-and-auth-link.sql"),
+		released_as: &[],
 	},
 ];
 
@@ -142,7 +156,7 @@ async fn run_locked(
 	for migration in migrations {
 		if let Some((id, name, hash)) = applied.iter().find(|(id, _, _)| *id == migration.id) {
 			let expected = migration.hash();
-			if *hash != expected || name != migration.name {
+			if !migration.accepts(hash) || name != migration.name {
 				return Err(MigrationError::Mismatch {
 					id: *id,
 					name: migration.name.to_string(),
@@ -212,5 +226,17 @@ mod tests {
 		// The ledger hashes the bytes: a CRLF checkout would make every database look changed.
 		assert!(TENANT.iter().all(|m| !m.sql.contains('\r')));
 		assert_eq!(TENANT[0].hash().len(), 64);
+	}
+
+	#[test]
+	fn a_released_hash_is_still_accepted() {
+		let first = &TENANT[0];
+		assert!(first.accepts(&first.hash()));
+		// What 0.1.0-0.1.2 recorded in every database they migrated.
+		assert!(first.accepts("50e9add430dcd22948e9e145223484414bbcee15d7f1cc1313d63daad4e41331"));
+		assert!(!first.accepts(&"0".repeat(64)));
+		// A released hash is an old version of THIS file, never today's.
+		assert!(TENANT.iter().all(|m| !m.released_as.contains(&m.hash().as_str())));
+		assert!(TENANT.iter().flat_map(|m| m.released_as).all(|h| h.len() == 64 && h.bytes().all(|b| b.is_ascii_hexdigit())));
 	}
 }

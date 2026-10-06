@@ -2,7 +2,7 @@
 --
 -- Who may notify whom is decided HERE, once, by the project's own row-level security when a row is
 -- inserted into push.messages. The sender expands and delivers what was already allowed; it never
--- decides access itself (docs/cloud/PUSH.md, P8).
+-- decides access itself.
 --
 -- The schema is expected to exist already, owned by the role the sender connects as, so that role
 -- needs no CREATE on the database. Role names come from the settings the runner sets first
@@ -47,13 +47,13 @@ $$;
 -- One row per project: how long the log is kept and how devices behave.
 CREATE TABLE push.settings (
 	id boolean PRIMARY KEY DEFAULT true CHECK (id),
-	-- Delivery rows and finished messages older than this are pruned (PUSH.md, PQ3).
+	-- Delivery rows and finished messages older than this are pruned.
 	retention_days integer NOT NULL DEFAULT 30 CHECK (retention_days BETWEEN 1 AND 3650),
 	-- A device not seen for this long is disabled (FCM's own staleness rule is a month).
 	stale_device_days integer NOT NULL DEFAULT 30 CHECK (stale_device_days BETWEEN 1 AND 3650),
 	-- When a second user registers a token already registered to someone else: false (the
 	-- default) moves the device to the new user, so a shared phone stops notifying its previous
-	-- owner; true keeps both (an app with account switching). PUSH.md, A2.
+	-- owner; true keeps both (an app with account switching).
 	shared_devices boolean NOT NULL DEFAULT false,
 	-- Whether a caller who is not signed in may register a device (a web page's subscribers).
 	anonymous_devices boolean NOT NULL DEFAULT false,
@@ -67,12 +67,12 @@ CREATE TABLE push.devices (
 	-- NULL: a device registered without signing in (settings.anonymous_devices).
 	user_id uuid,
 	transport text NOT NULL CHECK (transport IN ('apns', 'fcm', 'web')),
-	-- What the token is for: an app installation, or one Live Activity on an iPhone (A1).
+	-- What the token is for: an app installation, or one Live Activity on an iPhone.
 	kind text NOT NULL DEFAULT 'device' CHECK (kind IN ('device', 'live_activity')),
 	-- The APNs device token (hex), the FCM registration token, or the Web Push endpoint URL.
 	token text NOT NULL CHECK (length(token) BETWEEN 1 AND 4096),
 	-- Web Push only: the browser's key and auth secret (base64url), and which of the project's
-	-- VAPID keys it subscribed under, since a subscription can only ever take that key (A8).
+	-- VAPID keys it subscribed under, since a subscription can only ever take that key.
 	web_p256dh text,
 	web_auth text,
 	vapid_key_id text,
@@ -90,7 +90,7 @@ CREATE TABLE push.devices (
 	CHECK ((transport = 'apns') = (apns_environment IS NOT NULL)),
 	CHECK (kind = 'device' OR transport = 'apns')
 );
--- A2: one row per user per token, anonymous rows included (NULLS NOT DISTINCT, Postgres 15+).
+-- One row per user per token, anonymous rows included (NULLS NOT DISTINCT, Postgres 15+).
 CREATE UNIQUE INDEX devices_user_token ON push.devices (user_id, transport, token) NULLS NOT DISTINCT;
 CREATE INDEX devices_token ON push.devices (transport, token);
 CREATE INDEX devices_live_user ON push.devices (user_id) WHERE disabled_at IS NULL;
@@ -156,7 +156,7 @@ CREATE TABLE push.deliveries (
 	-- NULL once the device is deleted; the row stays for the log's retention.
 	device_id uuid REFERENCES push.devices (id) ON DELETE SET NULL,
 	transport text NOT NULL,
-	-- accepted is the PROVIDER's acceptance, never "delivered" (P11): that is received_at, which
+	-- accepted is the PROVIDER's acceptance, never "delivered": that is received_at, which
 	-- only the app reports.
 	status text NOT NULL DEFAULT 'pending'
 		CHECK (status IN ('pending', 'accepted', 'failed', 'unregistered', 'refused')),
@@ -228,7 +228,7 @@ AS $$
 	RETURNING id
 $$;
 
--- Registering a device. SECURITY DEFINER because moving a token away from its previous owner (A2)
+-- Registering a device. SECURITY DEFINER because moving a token away from its previous owner
 -- touches a row the caller cannot see; everything else it does is bounded to the caller's own row.
 CREATE FUNCTION push.register_device(
 	transport text,
@@ -282,7 +282,7 @@ BEGIN
 END
 $$;
 
--- An app's report that a notification arrived or was opened (P11). Only for the caller's own device.
+-- An app's report that a notification arrived or was opened. Only for the caller's own device.
 CREATE FUNCTION push.report_receipt(delivery_id bigint, event text) RETURNS boolean
 LANGUAGE plpgsql VOLATILE SECURITY DEFINER
 SET search_path = ''
@@ -331,7 +331,7 @@ END
 $$;
 
 -- The project's own APNs key, Firebase service account and VAPID keys: in the project's database,
--- beside the devices they send to, and nowhere else (docs/cloud/PUSH.md, P2 as reversed). `value`
+-- beside the devices they send to, and nowhere else. `value`
 -- is the sender's own shape for that kind; `summary` is what may be shown (ids, names, public keys).
 --
 -- Readable by the table's owner, the sender's role, and by NOBODY else: not anon, not
