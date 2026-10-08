@@ -236,7 +236,16 @@ mod tests {
 		assert!(first.accepts("50e9add430dcd22948e9e145223484414bbcee15d7f1cc1313d63daad4e41331"));
 		assert!(!first.accepts(&"0".repeat(64)));
 		// A released hash is an old version of THIS file, never today's.
-		assert!(TENANT.iter().all(|m| !m.released_as.contains(&m.hash().as_str())));
-		assert!(TENANT.iter().flat_map(|m| m.released_as).all(|h| h.len() == 64 && h.bytes().all(|b| b.is_ascii_hexdigit())));
+		assert!(
+			TENANT
+				.iter()
+				.all(|m| !m.released_as.contains(&m.hash().as_str()))
+		);
+		assert!(
+			TENANT
+				.iter()
+				.flat_map(|m| m.released_as)
+				.all(|h| h.len() == 64 && h.bytes().all(|b| b.is_ascii_hexdigit()))
+		);
 	}
 }
