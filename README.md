@@ -42,7 +42,7 @@ everything about a project's push, its keys included, stays with the project.
 A policy that lets a user notify the members of a chat they belong to:
 
 ```sql
-create policy "notify my chats" on push.messages for insert to snout_member
+create policy "notify my chats" on push.messages for insert to authenticated
 	with check (target_topic in (select 'chat:' || chat_id from chat_members where user_id = push.uid()));
 ```
 
@@ -82,7 +82,7 @@ anything this shape does not name. Unknown fields are refused, not ignored. Ever
 | `PUSH_PUBLIC_ADDR` | `0.0.0.0:5200` | no | the `/push/v1` API |
 | `PUSH_POD_MEMORY_MB` | `512` | no | concurrency toward the providers follows it (1 per 32 MB, 4 to 64) |
 | `PUSH_SCHEDULING` | `false` | no | whether a future `send_at` and long retries are allowed |
-| `PUSH_ANON_ROLE`, `PUSH_AUTHENTICATED_ROLE`, `PUSH_SERVICE_ROLE` | `snout_app`, `snout_member`, `snout_server` | no | the roles calls run as |
+| `PUSH_ANON_ROLE`, `PUSH_AUTHENTICATED_ROLE`, `PUSH_SERVICE_ROLE` | `anon`, `authenticated`, `service_role` | no | the roles calls run as |
 | `PUSH_INSTALL_ROLES` | `false` | no | create those roles when missing (self-hosting, tests) |
 | `PUSH_LOG`, `PUSH_LOG_FORMAT` | `info`, text | no | log filter; `json` for structured logs |
 

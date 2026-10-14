@@ -248,11 +248,11 @@ fn db_message(error: &tokio_postgres::Error) -> String {
 		.map_or_else(|| error.to_string(), |e| e.message().to_string())
 }
 
-/// Links devices to snout_identity.people when it can; not fatal, since without the link only the cascade
+/// Links devices to auth.users when it can; not fatal, since without the link only the cascade
 /// on a deleted user waits.
 async fn link_auth(client: &Client) {
 	if let Err(error) = client.batch_execute("SELECT push.link_auth()").await {
-		tracing::warn!(reason = %db_message(&error), "devices are not linked to snout_identity.people yet");
+		tracing::warn!(reason = %db_message(&error), "devices are not linked to auth.users yet");
 	}
 }
 
@@ -288,7 +288,7 @@ async fn serve(project: &Project, database_url: &str) -> Result<(), String> {
 		migrations::migrate(&mut client, migrations::TENANT, &project.roles)
 			.await
 			.map_err(|e| e.to_string())?;
-		// Neither is fatal: the owner reading push data and the cascade from snout_identity.people are
+		// Neither is fatal: the owner reading push data and the cascade from auth.users are
 		// conveniences, and sending must not wait for them.
 		if let Err(error) = client
 			.batch_execute("SELECT push.share_with_members()")

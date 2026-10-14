@@ -5,7 +5,7 @@ use tokio_postgres::{Client, NoTls};
 use crate::migrations::{Roles, TENANT, migrate};
 
 /// Roles are cluster-wide and the advisory lock is per database, so two tests migrating their own
-/// databases at once race to create `snout_app`; one at a time here.
+/// databases at once race to create `anon`; one at a time here.
 static MIGRATING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 /// A fresh, migrated database of its own for one test, or `None` when `PUSH_TEST_DATABASE_URL`

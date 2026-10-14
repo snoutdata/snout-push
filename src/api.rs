@@ -711,14 +711,14 @@ mod tests {
 
 		let now = now_secs();
 		let alice = jwt::sign(
-			&json!({"sub": ALICE, "role": "snout_member", "exp": now + 3600}),
+			&json!({"sub": ALICE, "role": "authenticated", "exp": now + 3600}),
 			SECRET,
 		);
 		let bob = jwt::sign(
-			&json!({"sub": BOB, "role": "snout_member", "exp": now + 3600}),
+			&json!({"sub": BOB, "role": "authenticated", "exp": now + 3600}),
 			SECRET,
 		);
-		let server = jwt::sign(&json!({"role": "snout_server", "exp": now + 3600}), SECRET);
+		let server = jwt::sign(&json!({"role": "service_role", "exp": now + 3600}), SECRET);
 		let call = |method: reqwest::Method, path: &str, token: &str| {
 			http.request(method, format!("{public}{path}"))
 				.header("authorization", format!("Bearer {token}"))

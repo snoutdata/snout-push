@@ -63,9 +63,9 @@ impl Default for Roles {
 	fn default() -> Self {
 		Self {
 			install_roles: false,
-			anon: "snout_app".into(),
-			authenticated: "snout_member".into(),
-			service: "snout_server".into(),
+			anon: "anon".into(),
+			authenticated: "authenticated".into(),
+			service: "service_role".into(),
 		}
 	}
 }

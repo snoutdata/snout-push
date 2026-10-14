@@ -8,7 +8,7 @@
 --    role that can SET ROLE to the sender could already read everything; this only stops it
 --    having to.
 --
--- 2. push.link_auth() read snout_identity.people to delete orphaned devices before adding its foreign keys,
+-- 2. push.link_auth() read auth.users to delete orphaned devices before adding its foreign keys,
 --    and the sender has no business reading the users table. It now needs only REFERENCES: the
 --    key is added NOT VALID and then validated, and a validation that fails (a device of a user
 --    deleted while push was not linked) leaves the key in force for every change from then on.
@@ -55,7 +55,7 @@ SELECT push.share_with_members();
 -- before any file runs, so that included the ledger. Reading it is harmless; writing it is not.
 DO $$
 DECLARE
-	service text := coalesce(nullif(current_setting('push.service_role', true), ''), 'snout_server');
+	service text := coalesce(nullif(current_setting('push.service_role', true), ''), 'service_role');
 BEGIN
 	IF to_regclass('push.migrations') IS NOT NULL THEN
 		EXECUTE format('REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON push.migrations FROM %I', service);
@@ -63,7 +63,7 @@ BEGIN
 END
 $$;
 
--- Adds the foreign keys to snout_identity.people once auth exists and the sender may point at it (REFERENCES,
+-- Adds the foreign keys to auth.users once auth exists and the sender may point at it (REFERENCES,
 -- granted when push is switched on). Idempotent; the sender calls it at start and hourly, since auth
 -- may be switched on after push and its table made after the sender started.
 CREATE OR REPLACE FUNCTION push.link_auth() RETURNS void
@@ -72,30 +72,30 @@ AS $$
 DECLARE
 	users regclass;
 BEGIN
-	IF NOT EXISTS (SELECT FROM pg_namespace WHERE nspname = 'snout_identity') OR NOT has_schema_privilege('snout_identity', 'USAGE') THEN
+	IF NOT EXISTS (SELECT FROM pg_namespace WHERE nspname = 'auth') OR NOT has_schema_privilege('auth', 'USAGE') THEN
 		RETURN;
 	END IF;
-	users := to_regclass('snout_identity.people');
+	users := to_regclass('auth.users');
 	IF users IS NULL THEN
 		RETURN;
 	END IF;
 	IF NOT has_table_privilege(users, 'REFERENCES') THEN
-		RAISE EXCEPTION 'push may not reference snout_identity.people (REFERENCES is granted when push is switched on)'
+		RAISE EXCEPTION 'push may not reference auth.users (REFERENCES is granted when push is switched on)'
 			USING ERRCODE = '42501';
 	END IF;
 	IF NOT EXISTS (SELECT FROM pg_constraint WHERE conname = 'devices_user_fk' AND conrelid = 'push.devices'::regclass) THEN
 		ALTER TABLE push.devices ADD CONSTRAINT devices_user_fk
-			FOREIGN KEY (user_id) REFERENCES snout_identity.people (id) ON DELETE CASCADE NOT VALID;
+			FOREIGN KEY (user_id) REFERENCES auth.users (id) ON DELETE CASCADE NOT VALID;
 	END IF;
 	IF NOT EXISTS (SELECT FROM pg_constraint WHERE conname = 'topic_members_user_fk' AND conrelid = 'push.topic_members'::regclass) THEN
 		ALTER TABLE push.topic_members ADD CONSTRAINT topic_members_user_fk
-			FOREIGN KEY (user_id) REFERENCES snout_identity.people (id) ON DELETE CASCADE NOT VALID;
+			FOREIGN KEY (user_id) REFERENCES auth.users (id) ON DELETE CASCADE NOT VALID;
 	END IF;
 	BEGIN
 		ALTER TABLE push.devices VALIDATE CONSTRAINT devices_user_fk;
 		ALTER TABLE push.topic_members VALIDATE CONSTRAINT topic_members_user_fk;
 	EXCEPTION WHEN foreign_key_violation THEN
-		RAISE WARNING 'push has rows for users snout_identity.people no longer holds; the link holds for every change from now on';
+		RAISE WARNING 'push has rows for users auth.users no longer holds; the link holds for every change from now on';
 	END;
 END
 $$;

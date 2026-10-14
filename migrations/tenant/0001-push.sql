@@ -11,13 +11,13 @@
 --
 -- Nothing here needs the auth schema: a project may switch push on before, or without, auth. The
 -- caller is read from the JWT claims the server sets for the transaction (push.uid()), and the link
--- to snout_identity.people is made by push.link_auth(), which the sender calls on every registration.
+-- to auth.users is made by push.link_auth(), which the sender calls on every registration.
 
 DO $$
 DECLARE
-	anon text := coalesce(nullif(current_setting('push.anon_role', true), ''), 'snout_app');
-	authed text := coalesce(nullif(current_setting('push.authenticated_role', true), ''), 'snout_member');
-	service text := coalesce(nullif(current_setting('push.service_role', true), ''), 'snout_server');
+	anon text := coalesce(nullif(current_setting('push.anon_role', true), ''), 'anon');
+	authed text := coalesce(nullif(current_setting('push.authenticated_role', true), ''), 'authenticated');
+	service text := coalesce(nullif(current_setting('push.service_role', true), ''), 'service_role');
 BEGIN
 	IF coalesce(current_setting('push.install_roles', true), 'false') = 'true' THEN
 		IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = anon) THEN
@@ -305,27 +305,27 @@ BEGIN
 END
 $$;
 
--- Adds the foreign keys to snout_identity.people once auth exists (a project may switch push on first), so a
+-- Adds the foreign keys to auth.users once auth exists (a project may switch push on first), so a
 -- deleted user takes their devices and memberships along. Idempotent; the sender calls it on every
 -- registration of the project.
 CREATE FUNCTION push.link_auth() RETURNS void
 LANGUAGE plpgsql VOLATILE
 AS $$
 BEGIN
-	IF to_regclass('snout_identity.people') IS NULL THEN
+	IF to_regclass('auth.users') IS NULL THEN
 		RETURN;
 	END IF;
 	IF NOT EXISTS (SELECT FROM pg_constraint WHERE conname = 'devices_user_fk' AND conrelid = 'push.devices'::regclass) THEN
 		DELETE FROM push.devices d WHERE d.user_id IS NOT NULL
-			AND NOT EXISTS (SELECT FROM snout_identity.people u WHERE u.id = d.user_id);
+			AND NOT EXISTS (SELECT FROM auth.users u WHERE u.id = d.user_id);
 		ALTER TABLE push.devices ADD CONSTRAINT devices_user_fk
-			FOREIGN KEY (user_id) REFERENCES snout_identity.people (id) ON DELETE CASCADE;
+			FOREIGN KEY (user_id) REFERENCES auth.users (id) ON DELETE CASCADE;
 	END IF;
 	IF NOT EXISTS (SELECT FROM pg_constraint WHERE conname = 'topic_members_user_fk' AND conrelid = 'push.topic_members'::regclass) THEN
 		DELETE FROM push.topic_members m WHERE m.user_id IS NOT NULL
-			AND NOT EXISTS (SELECT FROM snout_identity.people u WHERE u.id = m.user_id);
+			AND NOT EXISTS (SELECT FROM auth.users u WHERE u.id = m.user_id);
 		ALTER TABLE push.topic_members ADD CONSTRAINT topic_members_user_fk
-			FOREIGN KEY (user_id) REFERENCES snout_identity.people (id) ON DELETE CASCADE;
+			FOREIGN KEY (user_id) REFERENCES auth.users (id) ON DELETE CASCADE;
 	END IF;
 END
 $$;
@@ -375,9 +375,9 @@ ALTER TABLE push.credentials ENABLE ROW LEVEL SECURITY;
 
 DO $$
 DECLARE
-	anon text := coalesce(nullif(current_setting('push.anon_role', true), ''), 'snout_app');
-	authed text := coalesce(nullif(current_setting('push.authenticated_role', true), ''), 'snout_member');
-	service text := coalesce(nullif(current_setting('push.service_role', true), ''), 'snout_server');
+	anon text := coalesce(nullif(current_setting('push.anon_role', true), ''), 'anon');
+	authed text := coalesce(nullif(current_setting('push.authenticated_role', true), ''), 'authenticated');
+	service text := coalesce(nullif(current_setting('push.service_role', true), ''), 'service_role');
 BEGIN
 	EXECUTE format('GRANT USAGE ON SCHEMA push TO %I, %I, %I', anon, authed, service);
 	EXECUTE format('GRANT ALL ON ALL TABLES IN SCHEMA push TO %I', service);

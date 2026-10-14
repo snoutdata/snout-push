@@ -93,18 +93,18 @@ mod tests {
 	#[test]
 	fn a_good_token_names_its_role() {
 		let token = sign(
-			&json!({"sub": "u1", "role": "snout_member", "exp": 2000}),
+			&json!({"sub": "u1", "role": "authenticated", "exp": 2000}),
 			SECRET,
 		);
 		let caller = verify(&token, SECRET, &Roles::default(), 1000).unwrap();
-		assert_eq!(caller.role, "snout_member");
+		assert_eq!(caller.role, "authenticated");
 		assert_eq!(caller.claims["sub"], "u1");
 	}
 
 	#[test]
 	fn refusals() {
 		let roles = Roles::default();
-		let expired = sign(&json!({"role": "snout_app", "exp": 999}), SECRET);
+		let expired = sign(&json!({"role": "anon", "exp": 999}), SECRET);
 		assert!(
 			verify(&expired, SECRET, &roles, 1000)
 				.unwrap_err()
@@ -112,7 +112,7 @@ mod tests {
 				.contains("expired")
 		);
 		let other_secret = sign(
-			&json!({"role": "snout_app"}),
+			&json!({"role": "anon"}),
 			"another-secret-of-at-least-32-chars!",
 		);
 		assert!(
@@ -133,7 +133,7 @@ mod tests {
 		let none = format!(
 			"{}.{}.",
 			crate::b64url(br#"{"alg":"none"}"#),
-			crate::b64url(br#"{"role":"snout_server"}"#)
+			crate::b64url(br#"{"role":"service_role"}"#)
 		);
 		assert!(
 			verify(&none, SECRET, &roles, 0)
@@ -146,7 +146,7 @@ mod tests {
 			verify(&sign(&json!({}), SECRET), SECRET, &roles, 0)
 				.unwrap()
 				.role,
-			"snout_app"
+			"anon"
 		);
 	}
 }

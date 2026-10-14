@@ -27,7 +27,7 @@ pub struct Config {
 	/// Concurrency follows the memory; scheduling is for plans that never pause.
 	pub plan: Plan,
 	/// `PUSH_ANON_ROLE`, `PUSH_AUTHENTICATED_ROLE`, `PUSH_SERVICE_ROLE`: the API roles, defaulting to
-	/// `snout_app`, `snout_member` and `snout_server`. `PUSH_INSTALL_ROLES=true` creates them when
+	/// `anon`, `authenticated` and `service_role`. `PUSH_INSTALL_ROLES=true` creates them when
 	/// missing (self-hosting and tests only).
 	pub roles: Roles,
 }
@@ -153,7 +153,7 @@ mod tests {
 		let config = Config::from_map(&pod()).unwrap();
 		assert_eq!(config.public_addr.to_string(), "0.0.0.0:5200");
 		assert_eq!(config.plan, Plan::from_pod(512, false));
-		assert_eq!(config.roles.service, "snout_server");
+		assert_eq!(config.roles.service, "service_role");
 		assert!(!config.roles.install_roles);
 	}
 
