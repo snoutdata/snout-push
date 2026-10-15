@@ -150,6 +150,8 @@ pub struct Project {
 	pub providers: RwLock<Arc<Providers>>,
 	/// Woken by the API when it queues a message or changes a key.
 	pub nudge: Notify,
+	/// The database has the new role names (`layout.rs`), asked when the sender connects.
+	pub has_new_roles: std::sync::atomic::AtomicBool,
 }
 
 impl Project {
@@ -176,6 +178,7 @@ impl Project {
 			pool,
 			providers: RwLock::new(Arc::new(Providers::default())),
 			nudge: Notify::new(),
+			has_new_roles: false.into(),
 		})
 	}
 
@@ -248,11 +251,12 @@ fn db_message(error: &tokio_postgres::Error) -> String {
 		.map_or_else(|| error.to_string(), |e| e.message().to_string())
 }
 
-/// Links devices to auth.users when it can; not fatal, since without the link only the cascade
+/// Links devices to the project's people (`auth.users`, or `snout_identity.people` in the new
+/// layout) when it can; not fatal, since without the link only the cascade
 /// on a deleted user waits.
 async fn link_auth(client: &Client) {
 	if let Err(error) = client.batch_execute("SELECT push.link_auth()").await {
-		tracing::warn!(reason = %db_message(&error), "devices are not linked to auth.users yet");
+		tracing::warn!(reason = %db_message(&error), "devices are not linked to the project's users yet");
 	}
 }
 
@@ -285,9 +289,22 @@ async fn serve(project: &Project, database_url: &str) -> Result<(), String> {
 		}
 	});
 	let result = async {
-		migrations::migrate(&mut client, migrations::TENANT, &project.roles)
+		let has_new: bool = client
+			.query_one(crate::layout::ROLE_EXISTS_SQL, &[])
 			.await
-			.map_err(|e| e.to_string())?;
+			.map_err(|e| e.to_string())?
+			.get(0);
+		project
+			.has_new_roles
+			.store(has_new, std::sync::atomic::Ordering::Relaxed);
+		migrations::migrate(
+			&mut client,
+			migrations::TENANT,
+			&project.roles.in_database(has_new),
+			has_new,
+		)
+		.await
+		.map_err(|e| e.to_string())?;
 		// Neither is fatal: the owner reading push data and the cascade from auth.users are
 		// conveniences, and sending must not wait for them.
 		if let Err(error) = client

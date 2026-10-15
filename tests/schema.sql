@@ -9,8 +9,8 @@
 \set token 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90'
 
 -- Alice registers her phone.
-SET ROLE authenticated;
-SELECT set_config('request.jwt.claims', '{"sub":"' || :'alice' || '","role":"authenticated"}', false);
+SET ROLE snout_member;
+SELECT set_config('request.jwt.claims', '{"sub":"' || :'alice' || '","role":"snout_member"}', false);
 SELECT push.register_device('apns', :'token', apns_environment => 'production', app => 'com.example.app') AS alice_device \gset
 DO $$ BEGIN
 	ASSERT (SELECT count(*) FROM push.devices) = 1, 'alice sees her device';
@@ -28,7 +28,7 @@ SELECT :'again' = :'alice_device' AS same_row \gset
 \endif
 
 -- Bob cannot see it.
-SELECT set_config('request.jwt.claims', '{"sub":"' || :'bob' || '","role":"authenticated"}', false);
+SELECT set_config('request.jwt.claims', '{"sub":"' || :'bob' || '","role":"snout_member"}', false);
 DO $$ BEGIN ASSERT (SELECT count(*) FROM push.devices) = 0, 'bob cannot see alice''s device'; END $$;
 
 -- The phone passes to Bob, so it stops notifying Alice.
@@ -41,16 +41,16 @@ END $$;
 
 -- With shared_devices, both keep it (account switching).
 UPDATE push.settings SET shared_devices = true;
-SET ROLE authenticated;
-SELECT set_config('request.jwt.claims', '{"sub":"' || :'alice' || '","role":"authenticated"}', false);
+SET ROLE snout_member;
+SELECT set_config('request.jwt.claims', '{"sub":"' || :'alice' || '","role":"snout_member"}', false);
 SELECT push.register_device('apns', :'token', apns_environment => 'production') AS alice_device \gset
 RESET ROLE;
 DO $$ BEGIN ASSERT (SELECT count(*) FROM push.devices) = 2, 'shared: two rows'; END $$;
 UPDATE push.settings SET shared_devices = false;
 
 -- Anonymous devices are refused until the project allows them.
-SET ROLE anon;
-SELECT set_config('request.jwt.claims', '{"role":"anon"}', false);
+SET ROLE snout_app;
+SELECT set_config('request.jwt.claims', '{"role":"snout_app"}', false);
 DO $$ BEGIN
 	PERFORM push.register_device('web', 'https://fcm.googleapis.com/fcm/send/x', web_p256dh => 'k', web_auth => 'a');
 	RAISE EXCEPTION 'FAIL: an anonymous device was accepted';
@@ -58,7 +58,7 @@ EXCEPTION WHEN insufficient_privilege THEN NULL;
 END $$;
 RESET ROLE;
 UPDATE push.settings SET anonymous_devices = true;
-SET ROLE anon;
+SET ROLE snout_app;
 SELECT push.register_device('web', 'https://fcm.googleapis.com/fcm/send/x', web_p256dh => 'k', web_auth => 'a') AS anon_device \gset
 RESET ROLE;
 DO $$ BEGIN ASSERT (SELECT count(*) FROM push.devices WHERE user_id IS NULL) = 1, 'anonymous web device stored'; END $$;
@@ -76,8 +76,8 @@ EXCEPTION WHEN check_violation THEN NULL;
 END $$;
 
 -- A signed-in user may NOT send until the customer writes a policy.
-SET ROLE authenticated;
-SELECT set_config('request.jwt.claims', '{"sub":"' || :'alice' || '","role":"authenticated"}', false);
+SET ROLE snout_member;
+SELECT set_config('request.jwt.claims', '{"sub":"' || :'alice' || '","role":"snout_member"}', false);
 DO $$ BEGIN
 	PERFORM push.send('{"title":"hi"}', user_ids => ARRAY['00000000-0000-4000-8000-00000000000b'::uuid]);
 	RAISE EXCEPTION 'FAIL: a user sent with no policy';
@@ -86,9 +86,9 @@ END $$;
 RESET ROLE;
 
 -- The customer allows a user to notify themselves only.
-CREATE POLICY send_to_self ON push.messages FOR INSERT TO authenticated
+CREATE POLICY send_to_self ON push.messages FOR INSERT TO snout_member
 	WITH CHECK (target_user_ids = ARRAY[push.uid()]);
-SET ROLE authenticated;
+SET ROLE snout_member;
 SELECT push.send('{"title":"note to self"}', user_ids => ARRAY[:'alice'::uuid]) AS own_message \gset
 DO $$ BEGIN
 	PERFORM push.send('{"title":"hi bob"}', user_ids => ARRAY['00000000-0000-4000-8000-00000000000b'::uuid]);
@@ -117,7 +117,7 @@ END $$;
 RESET ROLE;
 
 -- Exactly one target.
-SET ROLE service_role;
+SET ROLE snout_server;
 DO $$ BEGIN
 	PERFORM push.send('{"title":"x"}', user_ids => ARRAY[gen_random_uuid()], topic => 'news');
 	RAISE EXCEPTION 'FAIL: two targets';
@@ -135,9 +135,9 @@ RESET ROLE;
 -- Receipts only for the caller's own device.
 INSERT INTO push.deliveries (message_id, device_id, transport, status)
 	VALUES (:server_message, :'bob_device', 'apns', 'accepted');
-SET ROLE authenticated;
+SET ROLE snout_member;
 SELECT push.report_receipt((SELECT max(id) FROM push.deliveries), 'opened') AS alice_receipt \gset
-SELECT set_config('request.jwt.claims', '{"sub":"' || :'bob' || '","role":"authenticated"}', false);
+SELECT set_config('request.jwt.claims', '{"sub":"' || :'bob' || '","role":"snout_member"}', false);
 DO $$ BEGIN ASSERT (SELECT count(*) FROM push.deliveries) = 1, 'bob sees the delivery to his device'; END $$;
 SELECT push.report_receipt((SELECT max(id) FROM push.deliveries), 'opened') AS bob_receipt \gset
 RESET ROLE;
@@ -153,8 +153,8 @@ SELECT (:'alice_receipt' = 'f' AND :'bob_receipt' = 't') AS receipts_ok \gset
 
 -- Topics: users join and leave for themselves only.
 INSERT INTO push.topics (name) VALUES ('news');
-SET ROLE authenticated;
-SELECT set_config('request.jwt.claims', '{"sub":"' || :'alice' || '","role":"authenticated"}', false);
+SET ROLE snout_member;
+SELECT set_config('request.jwt.claims', '{"sub":"' || :'alice' || '","role":"snout_member"}', false);
 INSERT INTO push.topic_members (topic, user_id) VALUES ('news', :'alice');
 DO $$ BEGIN
 	INSERT INTO push.topic_members (topic, user_id) VALUES ('news', '00000000-0000-4000-8000-00000000000b');
@@ -169,12 +169,12 @@ EXCEPTION WHEN check_violation THEN NULL;
 END $$;
 
 -- link_auth: once auth exists, a deleted user takes their devices and memberships.
-CREATE SCHEMA auth;
-CREATE TABLE auth.users (id uuid PRIMARY KEY);
-INSERT INTO auth.users VALUES (:'alice'), (:'bob');
+CREATE SCHEMA snout_identity;
+CREATE TABLE snout_identity.people (id uuid PRIMARY KEY);
+INSERT INTO snout_identity.people VALUES (:'alice'), (:'bob');
 SELECT push.link_auth();
 SELECT push.link_auth();
-DELETE FROM auth.users WHERE id = :'bob';
+DELETE FROM snout_identity.people WHERE id = :'bob';
 DO $$ BEGIN
 	ASSERT (SELECT count(*) FROM push.devices WHERE user_id = '00000000-0000-4000-8000-00000000000b') = 0,
 		'bob''s devices went with him';
@@ -184,14 +184,14 @@ END $$;
 
 -- The keys: nobody but the sender's role reads them, the service role included.
 INSERT INTO push.credentials (kind, value, summary) VALUES ('vapid', '{"keys": {}, "current": "v1"}', '{"current": "v1"}');
-SET ROLE service_role;
+SET ROLE snout_server;
 DO $$ BEGIN
 	PERFORM value FROM push.credentials;
 	RAISE EXCEPTION 'FAIL: the service role read the push keys';
 EXCEPTION WHEN insufficient_privilege THEN NULL;
 END $$;
 DO $$ BEGIN ASSERT (SELECT count(*) FROM push.credential_summaries()) = 1, 'the summaries are readable'; END $$;
-SET ROLE authenticated;
+SET ROLE snout_member;
 DO $$ BEGIN
 	PERFORM value FROM push.credentials;
 	RAISE EXCEPTION 'FAIL: a user read the push keys';

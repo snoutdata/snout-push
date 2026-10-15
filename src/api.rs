@@ -145,17 +145,32 @@ fn context(app: &Project, headers: &HeaderMap) -> Result<Caller, ApiError> {
 		.map_err(|e| ApiError::new(StatusCode::UNAUTHORIZED, e.0))
 }
 
+/// The role a caller runs as and the claims it is given: the role the claim names, as the data API
+/// runs it (`layout::role_to_run`), in the role and the claims alike.
+fn run_as(caller: &Caller, has_new_roles: bool) -> (String, String) {
+	let role = crate::layout::role_to_run(&caller.role, has_new_roles).to_string();
+	let mut claims = caller.claims.clone();
+	if claims.contains_key("role") {
+		claims.insert("role".into(), Value::String(role.clone()));
+	}
+	(role, Value::Object(claims).to_string())
+}
+
 /// Opens a transaction as the caller: their role, their claims, for this transaction only.
 async fn as_caller<'a>(
+	app: &Project,
 	client: &'a mut deadpool_postgres::Object,
 	caller: &Caller,
 ) -> Result<deadpool_postgres::Transaction<'a>, ApiError> {
 	let transaction = client.transaction().await?;
-	let claims = Value::Object(caller.claims.clone()).to_string();
+	let (role, claims) = run_as(
+		caller,
+		app.has_new_roles.load(std::sync::atomic::Ordering::Relaxed),
+	);
 	transaction
 		.execute(
 			"SELECT set_config('role', $1, true), set_config('request.jwt.claims', $2, true)",
-			&[&caller.role, &claims],
+			&[&role, &claims],
 		)
 		.await?;
 	Ok(transaction)
@@ -263,7 +278,7 @@ async fn register_device(
 	};
 	let kind = request.kind.unwrap_or_else(|| "device".into());
 	let mut client = tenant.pool.get().await?;
-	let transaction = as_caller(&mut client, &caller).await?;
+	let transaction = as_caller(&app, &mut client, &caller).await?;
 	let row = transaction
 		.query_one(
 			"SELECT push.register_device($1, $2, $3, $4, $5, $6, $7, $8, $9)::text",
@@ -293,7 +308,7 @@ async fn remove_device(
 	let caller = context(&app, &headers)?;
 	let tenant = &app;
 	let mut client = tenant.pool.get().await?;
-	let transaction = as_caller(&mut client, &caller).await?;
+	let transaction = as_caller(&app, &mut client, &caller).await?;
 	let removed = transaction
 		.execute("DELETE FROM push.devices WHERE id = $1::text::uuid", &[&id])
 		.await?;
@@ -332,7 +347,7 @@ async fn join_topic(
 	let tenant = &app;
 	signed_in(&caller)?;
 	let mut client = tenant.pool.get().await?;
-	let transaction = as_caller(&mut client, &caller).await?;
+	let transaction = as_caller(&app, &mut client, &caller).await?;
 	transaction
 		.execute(
 			"INSERT INTO push.topic_members (topic, user_id) VALUES ($1, push.uid()) \
@@ -353,7 +368,7 @@ async fn leave_topic(
 	let tenant = &app;
 	signed_in(&caller)?;
 	let mut client = tenant.pool.get().await?;
-	let transaction = as_caller(&mut client, &caller).await?;
+	let transaction = as_caller(&app, &mut client, &caller).await?;
 	transaction
 		.execute(
 			"DELETE FROM push.topic_members WHERE topic = $1 AND user_id = push.uid()",
@@ -442,7 +457,7 @@ async fn send(State(app): State<AppState>, headers: HeaderMap, body: axum::body:
 	check_sizes(&notification, &envelope)?;
 
 	let mut client = tenant.pool.get().await?;
-	let transaction = as_caller(&mut client, &caller).await?;
+	let transaction = as_caller(&app, &mut client, &caller).await?;
 	if let Some(send_at) = &request.send_at {
 		let future: bool = transaction
 			.query_one(
@@ -490,7 +505,7 @@ async fn message(State(app): State<AppState>, headers: HeaderMap, Path(id): Path
 	let caller = context(&app, &headers)?;
 	let tenant = &app;
 	let mut client = tenant.pool.get().await?;
-	let transaction = as_caller(&mut client, &caller).await?;
+	let transaction = as_caller(&app, &mut client, &caller).await?;
 	let row = transaction
 		.query_opt(
 			"SELECT id, status, status_detail, send_at::text, created_at::text, finished_at::text FROM push.messages WHERE id = $1",
@@ -526,7 +541,7 @@ async fn receipt(
 	let tenant = &app;
 	let request: ReceiptRequest = json_body(&body)?;
 	let mut client = tenant.pool.get().await?;
-	let transaction = as_caller(&mut client, &caller).await?;
+	let transaction = as_caller(&app, &mut client, &caller).await?;
 	let found: bool = transaction
 		.query_one(
 			"SELECT push.report_receipt($1, $2)",
@@ -549,7 +564,7 @@ async fn receipt(
 /// Keys are the project's to set, so only the service key may: a user's token, however valid, is
 /// refused here before anything is read.
 fn service_only(app: &Project, caller: &Caller) -> Result<(), ApiError> {
-	if caller.role == app.roles.service {
+	if crate::layout::same_role(&caller.role, &app.roles.service) {
 		Ok(())
 	} else {
 		Err(ApiError::new(
@@ -673,6 +688,32 @@ mod tests {
 	use crate::drain::Plan;
 	use crate::migrations::Roles;
 	use crate::net::Policy;
+
+	#[test]
+	fn a_caller_runs_as_the_role_its_claim_names() {
+		let caller = |role: &str| Caller {
+			role: role.into(),
+			claims: json!({"role": role, "sub": "u"})
+				.as_object()
+				.cloned()
+				.unwrap_or_default(),
+		};
+		for role in [
+			"authenticated",
+			"snout_member",
+			"service_role",
+			"snout_server",
+			"my_role",
+		] {
+			let (run, claims) = run_as(&caller(role), true);
+			assert_eq!(run, role);
+			assert!(claims.contains(&format!("\"role\":\"{role}\"")), "{claims}");
+		}
+		let (run, claims) = run_as(&caller("snout_member"), false);
+		assert_eq!(run, "authenticated");
+		assert!(claims.contains("\"role\":\"authenticated\""), "{claims}");
+		assert_eq!(run_as(&caller("anon"), false).0, "anon");
+	}
 
 	/// The whole product, as it runs in a pod, against a real Postgres (tests/db.sh) and a stand-in
 	/// Apple: the sender makes its VAPID keys, the service key sets an APNs key it has proven, an

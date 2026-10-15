@@ -32,11 +32,11 @@ pub async fn fresh_database(name: &str) -> Option<(Client, String)> {
 		..Roles::default()
 	};
 	assert_eq!(
-		migrate(&mut client, TENANT, &roles).await.unwrap(),
+		migrate(&mut client, TENANT, &roles, false).await.unwrap(),
 		TENANT.iter().map(|m| m.id).collect::<Vec<_>>()
 	);
 	assert!(
-		migrate(&mut client, TENANT, &roles)
+		migrate(&mut client, TENANT, &roles, false)
 			.await
 			.unwrap()
 			.is_empty(),

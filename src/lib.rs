@@ -15,6 +15,7 @@ pub mod drain;
 pub mod fcm;
 pub mod jwt;
 pub mod keys;
+pub mod layout;
 pub mod migrations;
 pub mod net;
 pub mod notification;

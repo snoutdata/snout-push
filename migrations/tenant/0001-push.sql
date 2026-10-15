@@ -9,19 +9,19 @@
 -- (push.anon_role, push.authenticated_role, push.service_role), and with push.install_roles = 'true'
 -- the three API roles are created when missing (tests and self-hosting).
 --
--- Nothing here needs the auth schema: a project may switch push on before, or without, auth. The
+-- Nothing here needs the identity schema: a project may switch push on before, or without, auth. The
 -- caller is read from the JWT claims the server sets for the transaction (push.uid()), and the link
--- to auth.users is made by push.link_auth(), which the sender calls on every registration.
+-- to snout_identity.people is made by push.link_auth(), which the sender calls on every registration.
 
 DO $$
 DECLARE
-	anon text := coalesce(nullif(current_setting('push.anon_role', true), ''), 'anon');
-	authed text := coalesce(nullif(current_setting('push.authenticated_role', true), ''), 'authenticated');
-	service text := coalesce(nullif(current_setting('push.service_role', true), ''), 'service_role');
+	snout_app text := coalesce(nullif(current_setting('push.anon_role', true), ''), 'snout_app');
+	authed text := coalesce(nullif(current_setting('push.authenticated_role', true), ''), 'snout_member');
+	service text := coalesce(nullif(current_setting('push.service_role', true), ''), 'snout_server');
 BEGIN
 	IF coalesce(current_setting('push.install_roles', true), 'false') = 'true' THEN
-		IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = anon) THEN
-			EXECUTE format('CREATE ROLE %I NOLOGIN NOINHERIT', anon);
+		IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = snout_app) THEN
+			EXECUTE format('CREATE ROLE %I NOLOGIN NOINHERIT', snout_app);
 		END IF;
 		IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = authed) THEN
 			EXECUTE format('CREATE ROLE %I NOLOGIN NOINHERIT', authed);
@@ -305,27 +305,27 @@ BEGIN
 END
 $$;
 
--- Adds the foreign keys to auth.users once auth exists (a project may switch push on first), so a
+-- Adds the foreign keys to snout_identity.people once auth exists (a project may switch push on first), so a
 -- deleted user takes their devices and memberships along. Idempotent; the sender calls it on every
 -- registration of the project.
 CREATE FUNCTION push.link_auth() RETURNS void
 LANGUAGE plpgsql VOLATILE
 AS $$
 BEGIN
-	IF to_regclass('auth.users') IS NULL THEN
+	IF to_regclass('snout_identity.people') IS NULL THEN
 		RETURN;
 	END IF;
 	IF NOT EXISTS (SELECT FROM pg_constraint WHERE conname = 'devices_user_fk' AND conrelid = 'push.devices'::regclass) THEN
 		DELETE FROM push.devices d WHERE d.user_id IS NOT NULL
-			AND NOT EXISTS (SELECT FROM auth.users u WHERE u.id = d.user_id);
+			AND NOT EXISTS (SELECT FROM snout_identity.people u WHERE u.id = d.user_id);
 		ALTER TABLE push.devices ADD CONSTRAINT devices_user_fk
-			FOREIGN KEY (user_id) REFERENCES auth.users (id) ON DELETE CASCADE;
+			FOREIGN KEY (user_id) REFERENCES snout_identity.people (id) ON DELETE CASCADE;
 	END IF;
 	IF NOT EXISTS (SELECT FROM pg_constraint WHERE conname = 'topic_members_user_fk' AND conrelid = 'push.topic_members'::regclass) THEN
 		DELETE FROM push.topic_members m WHERE m.user_id IS NOT NULL
-			AND NOT EXISTS (SELECT FROM auth.users u WHERE u.id = m.user_id);
+			AND NOT EXISTS (SELECT FROM snout_identity.people u WHERE u.id = m.user_id);
 		ALTER TABLE push.topic_members ADD CONSTRAINT topic_members_user_fk
-			FOREIGN KEY (user_id) REFERENCES auth.users (id) ON DELETE CASCADE;
+			FOREIGN KEY (user_id) REFERENCES snout_identity.people (id) ON DELETE CASCADE;
 	END IF;
 END
 $$;
@@ -334,8 +334,8 @@ $$;
 -- beside the devices they send to, and nowhere else. `value`
 -- is the sender's own shape for that kind; `summary` is what may be shown (ids, names, public keys).
 --
--- Readable by the table's owner, the sender's role, and by NOBODY else: not anon, not
--- authenticated, and not the service role either, even though it bypasses row-level security,
+-- Readable by the table's owner, the sender's role, and by NOBODY else: not the app key's role,
+-- not a signed-in member's, and not the service role either, even though it bypasses row-level security,
 -- because a grant is what it lacks. Keys go in through `/push/v1/credentials` (which proves them
 -- first) and never come back out; `push.credential_summaries()` is what a screen reads.
 CREATE TABLE push.credentials (
@@ -375,14 +375,14 @@ ALTER TABLE push.credentials ENABLE ROW LEVEL SECURITY;
 
 DO $$
 DECLARE
-	anon text := coalesce(nullif(current_setting('push.anon_role', true), ''), 'anon');
-	authed text := coalesce(nullif(current_setting('push.authenticated_role', true), ''), 'authenticated');
-	service text := coalesce(nullif(current_setting('push.service_role', true), ''), 'service_role');
+	snout_app text := coalesce(nullif(current_setting('push.anon_role', true), ''), 'snout_app');
+	authed text := coalesce(nullif(current_setting('push.authenticated_role', true), ''), 'snout_member');
+	service text := coalesce(nullif(current_setting('push.service_role', true), ''), 'snout_server');
 BEGIN
-	EXECUTE format('GRANT USAGE ON SCHEMA push TO %I, %I, %I', anon, authed, service);
+	EXECUTE format('GRANT USAGE ON SCHEMA push TO %I, %I, %I', snout_app, authed, service);
 	EXECUTE format('GRANT ALL ON ALL TABLES IN SCHEMA push TO %I', service);
 	-- Except the keys: see push.credentials.
-	EXECUTE format('REVOKE ALL ON push.credentials FROM PUBLIC, %I, %I, %I', anon, authed, service);
+	EXECUTE format('REVOKE ALL ON push.credentials FROM PUBLIC, %I, %I, %I', snout_app, authed, service);
 	EXECUTE format('REVOKE ALL ON FUNCTION push.credential_summaries() FROM PUBLIC');
 	EXECUTE format('GRANT EXECUTE ON FUNCTION push.credential_summaries() TO %I', service);
 	EXECUTE format('GRANT ALL ON ALL SEQUENCES IN SCHEMA push TO %I', service);

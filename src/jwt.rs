@@ -63,14 +63,16 @@ pub fn verify(token: &str, secret: &str, roles: &Roles, now: u64) -> Result<Call
 	{
 		return Err(refuse("The token is not valid yet."));
 	}
-	let role = claims
+	let claimed = claims
 		.get("role")
 		.and_then(Value::as_str)
-		.unwrap_or(&roles.anon)
-		.to_string();
-	if ![&roles.anon, &roles.authenticated, &roles.service].contains(&&role) {
-		return Err(refuse("The token's role is not one this API runs as."));
-	}
+		.unwrap_or(&roles.anon);
+	// Either vocabulary (`layout.rs`): `snout_member` is the configured `authenticated`, and so on.
+	let role = [&roles.anon, &roles.authenticated, &roles.service]
+		.into_iter()
+		.find(|r| crate::layout::same_role(r, claimed))
+		.ok_or_else(|| refuse("The token's role is not one this API runs as."))?
+		.clone();
 	Ok(Caller { role, claims })
 }
 
@@ -141,6 +143,15 @@ mod tests {
 				.0
 				.contains("HS256")
 		);
+		// The new role names are the same credentials as the old.
+		for (new, old) in [
+			("snout_app", "anon"),
+			("snout_member", "authenticated"),
+			("snout_server", "service_role"),
+		] {
+			let token = sign(&json!({ "role": new }), SECRET);
+			assert_eq!(verify(&token, SECRET, &roles, 0).unwrap().role, old);
+		}
 		// A token with no role is anon.
 		assert_eq!(
 			verify(&sign(&json!({}), SECRET), SECRET, &roles, 0)
