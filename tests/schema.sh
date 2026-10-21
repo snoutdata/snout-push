@@ -8,7 +8,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 engine="${STACK_ENGINE:-docker}"
 name="snout-push-schema-$$"
 
-"$engine" run -d --rm --name "$name" -e POSTGRES_PASSWORD=test postgres:17-alpine >/dev/null
+"$engine" run -d --rm --name "$name" -e POSTGRES_PASSWORD=test postgres:18-alpine >/dev/null
 trap '"$engine" rm -f "$name" >/dev/null 2>&1 || true' EXIT
 for _ in $(seq 1 60); do
 	"$engine" exec "$name" pg_isready -U postgres -q && break
