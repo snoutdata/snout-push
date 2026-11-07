@@ -401,6 +401,7 @@ mod tests {
 			&Envelope::default(),
 			TOKEN,
 			"my-app-1234",
+			// nosemgrep: generic.secrets.security.detected-google-oauth-access-token.detected-google-oauth-access-token
 			"ya29.x",
 		)
 		.unwrap();
@@ -408,6 +409,7 @@ mod tests {
 			r.url,
 			"https://fcm.googleapis.com/v1/projects/my-app-1234/messages:send"
 		);
+		// nosemgrep: generic.secrets.security.detected-google-oauth-access-token.detected-google-oauth-access-token
 		assert_eq!(r.header("authorization"), Some("Bearer ya29.x"));
 		let body: Value = serde_json::from_slice(&r.body).unwrap();
 		assert_eq!(body["message"]["android"]["direct_boot_ok"], true);
@@ -475,8 +477,10 @@ mod tests {
 		assert_eq!(
 			parse_token_response(
 				200,
+				// nosemgrep: generic.secrets.security.detected-google-oauth-access-token.detected-google-oauth-access-token
 				br#"{"access_token":"ya29.a","expires_in":3599,"token_type":"Bearer"}"#
 			),
+			// nosemgrep: generic.secrets.security.detected-google-oauth-access-token.detected-google-oauth-access-token
 			Ok(("ya29.a".into(), 3599))
 		);
 		assert!(
@@ -504,6 +508,7 @@ mod tests {
 				.0
 				.contains("authorized_user")
 		);
+		// nosemgrep: generic.secrets.security.detected-google-gcm-service-account.detected-google-gcm-service-account
 		let bad_key = json!({"type": "service_account", "project_id": "my-app-1234", "private_key": crate::keys::test_pem("AAAA"),
 			"client_email": "push@my-app-1234.iam.gserviceaccount.com", "token_uri": "https://attacker.example/token"});
 		assert!(
@@ -532,6 +537,7 @@ mod tests {
 			return;
 		};
 		let pem = String::from_utf8(out.stdout).unwrap();
+		// nosemgrep: generic.secrets.security.detected-google-gcm-service-account.detected-google-gcm-service-account
 		let file = json!({"type": "service_account", "project_id": "my-app-1234", "private_key_id": "kid-1",
 			"private_key": pem, "client_email": "push@my-app-1234.iam.gserviceaccount.com",
 			"token_uri": "https://attacker.example/token"});

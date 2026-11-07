@@ -620,6 +620,7 @@ mod tests {
 			eprintln!("skipped: no openssl");
 			return;
 		};
+		// nosemgrep: generic.secrets.security.detected-google-gcm-service-account.detected-google-gcm-service-account
 		let file = json!({"type": "service_account", "project_id": "my-app-1234", "private_key": String::from_utf8(out.stdout).unwrap(),
 			"client_email": "push@my-app-1234.iam.gserviceaccount.com"});
 		let (origin, mut seen) = stand_in_with(|path: &str| {
@@ -627,6 +628,7 @@ mod tests {
 				(
 					200,
 					vec![],
+					// nosemgrep: generic.secrets.security.detected-google-oauth-access-token.detected-google-oauth-access-token
 					br#"{"access_token":"ya29.test","expires_in":3599}"#.to_vec(),
 				)
 			} else {
